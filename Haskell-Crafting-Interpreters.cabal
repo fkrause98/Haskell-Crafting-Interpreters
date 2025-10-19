@@ -1,0 +1,38 @@
+cabal-version:      3.0
+name:               Haskell-Crafting-Interpreters
+version:            0.1.0.0
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             fkrause98
+maintainer:         fkrausear@gmail.com
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+
+common common-settings
+    default-language:   GHC2021
+    ghc-options:        -Wall
+    build-depends:      base ^>=4.20.2.0, megaparsec ^>=9.7.0
+
+library
+    import:             common-settings
+    hs-source-dirs:     app
+    exposed-modules: Parsers Tokens
+
+executable Haskell-Crafting-Interpreters
+    import:             common-settings
+    main-is:            Main.hs
+    hs-source-dirs:     app
+    build-depends:
+        Haskell-Crafting-Interpreters,
+
+        readline ^>=1.0.3.0
+
+test-suite parser-tests
+    import:             common-settings
+    type:               exitcode-stdio-1.0
+    main-is:            ParserTest.hs
+    hs-source-dirs:     tests
+
+    build-depends:
+        Haskell-Crafting-Interpreters,
+        hspec
