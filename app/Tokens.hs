@@ -1,4 +1,5 @@
 module Tokens where
+import Text.Megaparsec
 data TokenType
   = LeftParen
   | RightParen
@@ -50,7 +51,8 @@ data LoxToken where
   LoxToken ::
     { tokenType :: TokenType,
       lexeme :: Maybe String,
-      literal :: Maybe Literal
+      literal :: Maybe Literal,
+      position :: SourcePos
     } ->
     LoxToken
   deriving (Eq, Show)

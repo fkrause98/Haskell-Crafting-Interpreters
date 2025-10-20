@@ -1,76 +1,121 @@
-module Main (main) where
+module Main where
 
 import Test.Hspec
-import Parsers
+import Text.Megaparsec (SourcePos, initialPos)
+import Parsers (doParse)
 import Tokens
-import Data.Either (isLeft)
+
+data StrippedToken = StrippedToken TokenType (Maybe String) (Maybe Literal)
+    deriving (Eq, Show)
+
+stripToken :: LoxToken -> StrippedToken
+stripToken (LoxToken tt l lit _) = StrippedToken tt l lit
+
+defaultPos :: SourcePos
+defaultPos = initialPos "test"
+
+mkToken :: TokenType -> LoxToken
+mkToken tt = LoxToken tt Nothing Nothing defaultPos
+
+mkNumToken :: Float -> LoxToken
+mkNumToken n = LoxToken Number (Just (show n)) (Just (Num n)) defaultPos
+
+mkStrToken :: String -> LoxToken
+mkStrToken s = LoxToken String (Just s) (Just (Str s)) defaultPos
 
 main :: IO ()
-main = hspec spec
+main = hspec $ do
+  describe "Lox Parser" $ do
 
-spec :: Spec
-spec = describe "Lox Parser" $ do
-    -- Test for basic token types
-    describe "Token Parsing" $ do
-        it "parses an empty string as no tokens" $
-            doParse "" `shouldBe` Right []
+    let runTest input expectedTokens =
+          fmap (map stripToken) (doParse input) `shouldBe` Right (map stripToken expectedTokens)
 
-        it "ignores whitespace and comments" $
-            doParse " \n // this is a comment \n " `shouldBe` Right []
+    it "parses an empty string into an empty list of tokens" $ do
+      runTest "" []
 
-        it "parses single-character tokens" $ do
-            let input = "( ) { } , . - + ; * /"
-            let expected = Right
-                  [ LoxToken LeftParen  Nothing Nothing
-                  , LoxToken RightParen Nothing Nothing
-                  , LoxToken LeftBrace  Nothing Nothing
-                  , LoxToken RightBrace Nothing Nothing
-                  , LoxToken Comma      Nothing Nothing
-                  , LoxToken Dot        Nothing Nothing
-                  , LoxToken Minus      Nothing Nothing
-                  , LoxToken Plus       Nothing Nothing
-                  , LoxToken SemiColon  Nothing Nothing
-                  , LoxToken Star       Nothing Nothing
-                  , LoxToken Slash      Nothing Nothing
-                  ]
-            doParse input `shouldBe` expected
+    it "handles whitespace and comments, producing no tokens" $ do
+      runTest "  // this is a comment \n  " []
 
-        it "parses multi-character tokens" $ do
-            let input = "!= == >= <= ! = > <"
-            let expected = Right
-                  [ LoxToken BangEqual    Nothing Nothing
-                  , LoxToken EqualEqual   Nothing Nothing
-                  , LoxToken GreaterEqual Nothing Nothing
-                  , LoxToken LessEqual    Nothing Nothing
-                  , LoxToken Bang         Nothing Nothing
-                  , LoxToken Equal        Nothing Nothing
-                  , LoxToken Greater      Nothing Nothing
-                  , LoxToken Less         Nothing Nothing
-                  ]
-            doParse input `shouldBe` expected
+    it "parses all single-character tokens" $ do
+      let input = "(){},.-+;* /"
+      let expected = [
+            mkToken LeftParen, mkToken RightParen, mkToken LeftBrace,
+            mkToken RightBrace, mkToken Comma, mkToken Dot, mkToken Minus,
+            mkToken Plus, mkToken SemiColon, mkToken Star, mkToken Slash
+            ]
+      runTest input expected
 
-    -- Test for literals (strings, numbers, identifiers)
-    describe "Literal Parsing" $ do
-        it "parses a number literal" $
-            doParse "123.45" `shouldBe` Right [LoxToken Number (Just "123.45") (Just (Num 123.45))]
+    it "parses all multi-character tokens" $ do
+      let input = "! != = == > >= < <="
+      let expected = [
+            mkToken Bang, mkToken BangEqual, mkToken Equal,
+            mkToken EqualEqual, mkToken Greater, mkToken GreaterEqual,
+            mkToken Less, mkToken LessEqual
+            ]
+      runTest input expected
 
-        it "parses a string literal with spaces" $
-            doParse "\"hello world!\"" `shouldBe` Right [LoxToken String (Just "hello world!") (Just (Str "hello world!"))]
+    it "parses a string literal" $ do
+      runTest "\"hello world\"" [mkStrToken "hello world"]
 
-        it "fails on an unterminated string" $
-            doParse "\"hello" `shouldSatisfy` isLeft
+    it "parses an empty string literal" $ do
+      runTest "\"\"" [mkStrToken ""]
 
-        it "parses a simple identifier" $
-            doParse "foo" `shouldBe` Right [LoxToken Identifier (Just "foo") Nothing]
+    it "parses a floating-point number literal" $ do
+      runTest "123.45" [mkNumToken 123.45]
 
-    -- Test for keywords and a combined expression
-    describe "Keyword and Expression Parsing" $ do
-        it "parses keywords correctly" $ do
-            let input = "var fun if else"
-            let expected = Right
-                  [ LoxToken Var  (Just "var")  Nothing
-                  , LoxToken Fun  (Just "fun")  Nothing
-                  , LoxToken If   (Just "if")   Nothing
-                  , LoxToken Else (Just "else") Nothing
-                  ]
-            doParse input `shouldBe` expected
+    it "parses an integer as a float (with decimal)" $ do
+      -- The parser expects a decimal, so we provide "789.0" instead of "789"
+      runTest "789.0" [mkNumToken 789.0]
+
+    it "parses a user-defined identifier" $ do
+      runTest "myVariable" [LoxToken Identifier (Just "myVariable") Nothing defaultPos]
+
+    it "parses all language keywords correctly" $ do
+      let input = "and class else false for fun if nil or print return super this true var while"
+      let expected = [
+            LoxToken And (Just "and") Nothing defaultPos,
+            LoxToken Class (Just "class") Nothing defaultPos,
+            LoxToken Else (Just "else") Nothing defaultPos,
+            LoxToken Tokens.False (Just "false") Nothing defaultPos,
+            LoxToken For (Just "for") Nothing defaultPos,
+            LoxToken Fun (Just "fun") Nothing defaultPos,
+            LoxToken If (Just "if") Nothing defaultPos,
+            LoxToken Nil (Just "nil") Nothing defaultPos,
+            LoxToken Or (Just "or") Nothing defaultPos,
+            LoxToken Print (Just "print") Nothing defaultPos,
+            LoxToken Return (Just "return") Nothing defaultPos,
+            LoxToken Super (Just "super") Nothing defaultPos,
+            LoxToken This (Just "this") Nothing defaultPos,
+            LoxToken Tokens.True (Just "true") Nothing defaultPos,
+            LoxToken Var (Just "var") Nothing defaultPos,
+            LoxToken While (Just "while") Nothing defaultPos
+            ]
+      runTest input expected
+
+    it "correctly ignores single-line comments" $ do
+      let input = "var x = 10.0; // this is ignored"
+      let expected = [
+            LoxToken Var (Just "var") Nothing defaultPos,
+            LoxToken Identifier (Just "x") Nothing defaultPos,
+            mkToken Equal,
+            mkNumToken 10.0,
+            mkToken SemiColon
+            ]
+      runTest input expected
+
+    it "parses a simple variable declaration statement" $ do
+      let input = "var language = \"lox\";"
+      let expected = [
+            LoxToken Var (Just "var") Nothing defaultPos,
+            LoxToken Identifier (Just "language") Nothing defaultPos,
+            mkToken Equal,
+            mkStrToken "lox",
+            mkToken SemiColon
+            ]
+      runTest input expected
+
+    it "correctly fails to parse an unterminated string" $ do
+      let input = "\"hello"
+      doParse input `shouldSatisfy` isLeft
+        where isLeft (Left _) = Prelude.True
+              isLeft _        = Prelude.False

@@ -26,7 +26,10 @@ pTokens = sc *> many (_lexeme pSingleToken) <* eof
     pSingleToken = choice [pToken, pString, pNumber, pIdentifier]
 
 pToken :: Parser LoxToken
-pToken = choice [ char '(' >> return LeftParen,
+pToken = do
+  pos <- getSourcePos
+
+  tokenType <- ( choice [ char '(' >> return LeftParen,
                      char ')' >> return RightParen,
                      char '{' >> return LeftBrace,
                      char '}' >> return RightBrace,
@@ -46,25 +49,35 @@ pToken = choice [ char '(' >> return LeftParen,
                      char ('>') >> return Greater,
                      char ('=') >> return Equal,
                      char '/' >> notFollowedBy ( char '/') >> return Slash
-                     ] >>= buildToken
-         where
-           buildToken tokenType = return LoxToken { tokenType = tokenType, lexeme = Nothing, literal = Nothing}
+                     ] )
+  buildToken tokenType pos
+  where
+    buildToken tokenType pos = return LoxToken { tokenType = tokenType, lexeme = Nothing, literal = Nothing, position = pos}
 
 pString :: Parser  LoxToken
-pString = between (char '"') (char '"') ( many (noneOf "\"") ) >>= \str -> return LoxToken { tokenType = String, lexeme = Just str, literal = Just (Str str) }
+pString = do
+  pos <- getSourcePos
+  str <- between (char '"') (char '"') ( many (noneOf "\"") )
+  return LoxToken { tokenType = String, lexeme = Just str, literal = Just (Str str), position = pos }
 
 pNumber :: Parser LoxToken
-pNumber = float >>= buildNumToken
+pNumber = do
+  pos <- getSourcePos
+  num <- float
+  buildNumToken num pos
   where
-    buildNumToken dec = return LoxToken { tokenType = Number, lexeme = Just $ show dec, literal = Just (Num dec) }
+    buildNumToken dec pos = return LoxToken { tokenType = Number, lexeme = Just $ show dec, literal = Just (Num dec), position = pos }
 
 pComment :: Parser ()
 pComment = skipLineComment "//"
 
 pIdentifier :: Parser ( LoxToken )
-pIdentifier = some alphaNumChar >>= buildToken
+pIdentifier = do
+  pos <- getSourcePos
+  identifier <- some alphaNumChar
+  buildToken identifier pos
   where
-    buildToken identifier = return LoxToken { tokenType = matchToken identifier, lexeme = Just identifier, literal = Nothing }
+    buildToken identifier pos = return LoxToken { tokenType = matchToken identifier, lexeme = Just identifier, literal = Nothing, position = pos }
     matchToken identifier
         | identifier == "and" = And
         | identifier == "class" = Class
